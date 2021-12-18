@@ -22,7 +22,7 @@ namespace Bot
         private CommandService _commandservice;
         private IServiceProvider _services;
         private bool hasSentLog = false;
-        private string connstr = "Server=echstreme.de;Port=3306;Database=c1Look;Uid=c1Look;Pwd=gkmcpLNNF6Y_5;SSL Mode =None";
+        private string connstr = "THISCONNECTSTOMYSQL! THIS INFORMATION HAS BEEN EXCLUDED";
         private IMessageChannel modlog;
         public async Task RunBotAsync()
          {
@@ -34,7 +34,7 @@ namespace Bot
                 .AddSingleton(_commandservice)
                 .BuildServiceProvider();
  
-            string token = "OTEyNzU0MTE0NDAyODY1MjA0.YZ0igw.8Wlt93iMbLOyN_ss2SFX0jrvO7s";
+            string token = "";
 
             await RegisterCommandsAsync();
             await _dclient.LoginAsync(TokenType.Bot, token);
