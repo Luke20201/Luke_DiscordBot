@@ -26,7 +26,7 @@ namespace Bot.Admins
         private IGuildUser filler;
         private bool deleteCommandsOnUse = true; // Set This to false to disable Admin Commands deleting after being used
         private bool reasonsRequired = true; //Set this to false to disable reasons being required on Punishments
-        private string connStr = "Server=echstreme.de;Port=3306;Database=c1Look;Uid=c1Look;Pwd=gkmcpLNNF6Y_5;SSL Mode =None";
+        private string connStr = "REDACTED";
         public async void SQLRead()
         {
             await Context.Guild.DownloadUsersAsync();
