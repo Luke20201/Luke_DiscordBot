@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Bot;
 using MySql.Data;
 using MySql.Data.MySqlClient;
+using Discord.Interactions;
 
 namespace Bot
 {
@@ -19,38 +20,42 @@ namespace Bot
         static void Main(string[] args) => new Program().RunBotAsync().GetAwaiter().GetResult();
 
         private DiscordSocketClient _dclient;
-        private CommandService _commandservice;
+        private InteractionService _interactionService;
         private IServiceProvider _services;
-        private bool hasSentLog = false;
-        private string connstr = "THISCONNECTSTOMYSQL! THIS INFORMATION HAS BEEN EXCLUDED";
+        private string connstr = "";
         private IMessageChannel modlog;
         public async Task RunBotAsync()
          {
-            _dclient = new DiscordSocketClient();
-            _commandservice = new CommandService();
+            var config = new DiscordSocketConfig()
+            {
+                GatewayIntents = GatewayIntents.All
+            };
+
+            _dclient = new DiscordSocketClient(config);
             _services = new ServiceCollection()
 
                 .AddSingleton(_dclient)
-                .AddSingleton(_commandservice)
+                .AddSingleton(x => new InteractionService(x.GetRequiredService<DiscordSocketClient>()))
                 .BuildServiceProvider();
  
             string token = "";
 
-            await RegisterCommandsAsync();
             await _dclient.LoginAsync(TokenType.Bot, token);
             // Set custom status here
+            
             await _dclient.SetGameAsync("Watching over Top5Gaming");
             await _dclient.StartAsync();
-            _dclient.UserVoiceStateUpdated += UserInVC;
+            await _services.GetRequiredService<InteractionService>().AddModulesAsync(Assembly.GetEntryAssembly(), _services);
             _dclient.Ready += BotReady;
             _dclient.MessageReceived += OnMessageRecived;
             _dclient.MessageReceived += _dclient_MessageReceived;
-            _dclient.MessageUpdated += _dclient_MessageUpdated; 
-            _dclient.UserLeft += memberLeft;
-            modlog = _dclient.GetChannel(745398099522093107) as IMessageChannel;
+            _dclient.MessageUpdated += _dclient_MessageUpdated;
+            _dclient.InteractionCreated += HandleInteraction;
+            _dclient.SelectMenuExecuted += MyMenuHandler;
+            _dclient.SlashCommandExecuted += SlashCommandHandler;
+
             await Task.Delay(-1);
         }
-
         private Task _dclient_MessageReceived(SocketMessage arg)
         {
             if (arg.Channel.Id == 780616856440012811)
@@ -63,68 +68,137 @@ namespace Bot
             return Task.CompletedTask;
         }
 
+        // The following method is a sample Interaction menu. This menu give's roles.
+        public async Task Roles(SocketSlashCommand ro)
+        {
+            Console.WriteLine("Debug Roles");
+            var menuBuilder = new SelectMenuBuilder()
+        .WithPlaceholder("Select a role")
+        .WithCustomId("role-menu")
+        .WithMinValues(1)
+        .WithMaxValues(20)
+        .AddOption("Video Notified", "opt-a")
+        .AddOption("Giveaway Notified", "opt-b")
+        .AddOption("Server Announcements", "opt-c")
+        .AddOption("Item Shop Notified", "opt-d")
+        .AddOption("He/Him", "opt-e")
+        .AddOption("They/Them", "opt-f")
+        .AddOption("She/Her", "opt-g")
+        .AddOption("Ask Me", "opt-h")
+        .AddOption("Any", "opt-i")
+        .AddOption("PC", "opt-j")
+        .AddOption("PS4", "opt-k")
+        .AddOption("Xbox", "opt-l")
+        .AddOption("Mobile", "opt-m")
+        .AddOption("Switch", "opt-n")
+        .AddOption("North America", "opt-o")
+        .AddOption("South America", "opt-p")
+        .AddOption("Europe", "opt-q")
+        .AddOption("Africa", "opt-r")
+        .AddOption("Asia", "opt-s")
+        .AddOption("Oceania", "opt-t");
+            Console.WriteLine("Building Roles");
+            var builder = new ComponentBuilder()
+                .WithSelectMenu(menuBuilder);
+
+            Console.WriteLine("Roles Built!");
+            await ro.DeferAsync();
+            await ro.FollowupAsync("Get your role's here! We have notifications, pronouns, continents, and console's!", components: builder.Build());
+        }
+        public async Task MyMenuHandler(SocketMessageComponent arg)
+        {
+            string text = string.Join(", ", arg.Data.Values);
+            var user = arg.User as IGuildUser;
+
+            if (arg.Data.CustomId == "role-menu")
+            {
+                if (text.Contains("opt-a"))
+                {
+                    await user.AddRoleAsync(742874128700276926);
+                }
+                else if (text.Contains("opt-b"))
+                {
+                    await user.AddRoleAsync(742874693618499756);
+                }
+                else if (text.Contains("opt-c"))
+                {
+                    await user.AddRoleAsync(742874990403387393);
+                }
+                else if (text.Contains("opt-d"))
+                {
+                    await user.AddRoleAsync(821889255198294076);
+                }
+                else if (text.Contains("opt-e"))
+                {
+                    await user.AddRoleAsync(903370384479498261);
+                }
+                else if (text.Contains("opt-f"))
+                {
+                    await user.AddRoleAsync(903370383191846922);
+                }
+                else if (text.Contains("opt-g"))
+                {
+                    await user.AddRoleAsync(903370383770660884);
+                }
+                else if (text.Contains("opt-h"))
+                {
+                    await user.AddRoleAsync(903370382281682955);
+                }
+                else if (text.Contains("opt-i"))
+                {
+                    await user.AddRoleAsync(903370381816135702);
+                }
+            }
+        }
+
+        private async Task SlashCommandHandler(SocketSlashCommand command)
+        {
+            if (command.CommandName == "rolemenu") await Roles(command);
+        }
+        private async Task HandleInteraction(SocketInteraction arg)
+        {
+            try
+            {
+                // Create an execution context that matches the generic type parameter of your InteractionModuleBase<T> modules
+                var ctx = new SocketInteractionContext(_dclient, arg);
+                var commands = _services.GetRequiredService<InteractionService>();
+                await commands.ExecuteCommandAsync(ctx, _services);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+
+                if (arg.Type == InteractionType.ApplicationCommand)
+                    await arg.GetOriginalResponseAsync().ContinueWith(async (msg) => await msg.Result.DeleteAsync());
+            }
+        }
         private async Task _dclient_MessageUpdated(Cacheable<IMessage, ulong> arg1, SocketMessage arg2, ISocketMessageChannel arg3)
         {
             await OnMessageRecived(arg2);
         }
 
-        private Task memberLeft(SocketGuildUser user)
+        private async Task BotReady()
         {
-            sqlQuery = "DELETE FROM `mutes` WHERE `UserID` = " + user.Id + ";";
-            SQLInsert();
-            return Task.CompletedTask;
-        }
-
-        private async Task UserInVC(SocketUser user, SocketVoiceState arg1, SocketVoiceState arg2)
-        {
-            SocketGuildUser user1 = user as SocketGuildUser;
-            SocketGuildUser musicBot = _dclient.GetUser(282859044593598464) as SocketGuildUser;
-            IVoiceChannel channel = user1.VoiceChannel;
-            if (channel.Id == 741010210021179525)
+            try
             {
-                Console.WriteLine("Someone is in Music VC");
-                if (musicBot.VoiceChannel != _dclient.GetChannel(741010210021179525))
-                {
-                    Console.WriteLine("But the Music bot isn't");
-                    await Task.Delay(60000);
-                    if (musicBot.VoiceChannel.Id != 741010210021179525)
-                    {
-                        Console.WriteLine("But the Music bot still isn't");
-                        ITextChannel chat = _dclient.GetChannel(543261550639579161) as ITextChannel;
-                        await chat.SendMessageAsync(user.Mention + "Hey! I caught you AFK farming! Please do not do it again! Admin's have been notifed about this!");
-                        await SendLog("AFK Farmer", user.Mention + "Has been removed from <#741010210021179525> for AFK Farming!");
-                        IGuildUser user2 = user1 as IGuildUser;
-                        await user2.ModifyAsync(x => x.Channel = null);
-                    }
-                }
+                modlog = _dclient.GetChannel(745398099522093107) as ISocketMessageChannel;
+                var commands = _services.GetRequiredService<InteractionService>();
+                
+                await commands.RegisterCommandsToGuildAsync(542876608143556623, true);
+
+                var guild = _dclient.GetGuild(542876608143556623);
+                var guildCommand = new SlashCommandBuilder();
+                guildCommand.WithName("rolemenu");
+                guildCommand.WithDescription("Spawn the role's menu");
+                await guild.CreateApplicationCommandAsync(guildCommand.Build());
+                Console.WriteLine("Ready");
             }
-            return;
-        }
-
-        private Task BotReady()
-        {
-            Console.WriteLine("Ready");
-            MuteUpdate();
-            return Task.CompletedTask;
-        }
-
-        public async Task RegisterCommandsAsync()
-        {
-            _dclient.MessageReceived += HandleCommandAsync;
-            await _commandservice.AddModulesAsync(Assembly.GetEntryAssembly(), _services);
-        }
-
-        private async Task HandleCommandAsync(SocketMessage arg)
-        {
-            var message = arg as SocketUserMessage;
-            var context = new SocketCommandContext(_dclient, message);
-
-            int argPos = 0;
-            if (message.HasStringPrefix("!", ref argPos))
+            catch (Exception ex)
             {
-                var result = await _commandservice.ExecuteAsync(context, argPos, _services);
+                Console.WriteLine(ex.ToString());
             }
         }
+
         string[] warnList = new string[]
         {
             "fuck",
@@ -191,21 +265,11 @@ namespace Bot
             "faggot",
             "Fag"
         };
-        string[] t5gteam = new string[]
+        string[] noping = new string[]
         {
-            "<@160619327316295680>", // Shift
-            "<@194594539883724800>", // Tommy
-            "<@305583122659934208>", // Sammy
-            "<@328060096443842562>", // Consequence
-            "<@142787342111866881>"  // Dynamic
+            "<@>"
         };
 
-        string[] scamLinks = new string[]
-        {
-            "https://dlscord.org/airdrop/nitro",
-            "https://discocrd.gift/",
-            "https://discord-cpp.com/",
-        };
         public async Task OnMessageRecived(SocketMessage message)
         {
             if (message.Channel is IDMChannel)
@@ -224,13 +288,12 @@ namespace Bot
                 await message.DeleteAsync();
                 ISocketMessageChannel thisChanneel = message.Channel;
                 await SendEmbedMessage("Chat Manager", message.Author.Mention + "'s message has been deleted by Chat Moderator as it contained a bad word.\n Warning issued to " + message.Author.Mention + " **for Bad Word Usage**", thisChanneel);
-                await SendLog("__Top5Gaming Auto Moderator__", "**Member**      | " + user.Mention + "\n**Offense** | Violation of Banned Words list \n  **Legnth** | Permanent \n **Punishment** | WARNING \n **Punished By**  | AutoModerator");
                 sqlQuery = "INSERT INTO `warnings` (`UserID`, `warnReason`, `AdminID`) VALUES ('" + user.Id + "', 'Violation of Bad Words list', '876197995547344896')";
                 SQLInsert();
+                await SendLog("__Top5Gaming Auto Moderator__", "**Member**      | " + user.Mention + "\n**Offense** | Violation of Banned Words list \n  **Legnth** | Permanent \n **Punishment** | WARNING \n **Punished By**  | AutoModerator");
             }
-
             
-            if (message.Content.Split(" ").Intersect(t5gteam).Any())
+            if (message.Content.Split(" ").Intersect(noping).Any())
             {
                 var user = (message.Author as IGuildUser);
                 await message.DeleteAsync();
@@ -250,24 +313,12 @@ namespace Bot
                 await SendEmbedMessage("Chat Manager", message.Author.Mention + "'s message has been deleted by Chat Moderator as it contained a extremely offensive words. \n Ban issued to " + message.Author.Mention + " **for Abusive Language**", thisChanneel);
                 await SendLog("__Top5Gaming Auto Moderator__", "**Member**      | " + user.Mention + "\n**Offense** | Violation of Banned Words list \n  **Legnth** | Permanent \n **Punishment** | BAN \n **Punished By**  | AutoModerator");
             }
-
-            /*if (message.Content.Contains("soccer") || message.Content.Contains("Soccer"))
-            {
-                await message.Channel.SendMessageAsync("It's football!");
-            }*/
-
-            if (message.Content.Split(" ").Intersect(scamLinks).Any())
-            {
-                await SendEmbedMessage("SCAM LINK DETECTED", message.Author.Mention + " has been banned for posting a link to a known scam site.", _dclient.GetChannel(message.Channel.Id) as ISocketMessageChannel);
-                await (message.Author as IGuildUser).BanAsync(7, "Scam attempts");
-            }
-
-            AutoModd(message);
+            await AutoModd(message);
         }
 
         private async Task SendDM(SocketUser author, string content, SocketUser dms)
         {
-            if (author.Id != 876197995547344896)
+            if (author.Id != 912754114402865204)
             {
                 await dms.SendMessageAsync("**" + author.Mention + "** says\n \n " + content);
             }
@@ -288,64 +339,6 @@ namespace Bot
                 Console.WriteLine(ex.ToString());
             }
         }
-
-        public async Task MuteUpdate()
-        {
-            await Task.Run(() =>
-            {
-                MySqlConnection conn = new MySqlConnection(connstr);
-                try
-                {
-                    conn.Open();
-                    MySqlCommand cmd = new MySqlCommand("UPDATE `mutes` SET MuteUntil = MuteUntil - 1", conn);
-                    cmd.ExecuteNonQuery();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.ToString());
-                }
-                conn.Close();
-                MuteRead();
-                MuteUpdate();
-            });
-        }
-
-        public async Task MuteRead()
-        {
-            await Task.Run(async () =>
-            {
-                MySqlConnection conn = new MySqlConnection(connstr);
-                try
-                {
-                    conn.Open();
-                    MySqlCommand cmd = new MySqlCommand("SELECT * FROM `mutes` WHERE MuteUntil <= 0", conn);
-                    MySqlDataReader rdr = cmd.ExecuteReader();
-
-                    while (rdr.Read())
-                    {
-                        if (!hasSentLog)
-                        {
-                            hasSentLog = true;
-                            SendLog("__Top5Gaming Mute Manager__", "**Member**        | <@" + rdr[1] + ">\n **Punishment**       | UNMUTE" + "\n **Punished by**          | <@" + rdr[4] + ">");
-                        }
-                        await _dclient.GetGuild(542876608143556623).DownloadUsersAsync();
-                        ulong id = Convert.ToUInt64(rdr[1]);
-                        await _dclient.GetGuild(542876608143556623).GetUser(id).RemoveRoleAsync(553340347606892544);
-                        sqlQuery = "DELETE FROM `mutes` WHERE `UserID` = " + rdr[1] + ";";
-                        SQLInsert();
-                        hasSentLog = false;
-                    }
-                    rdr.Close();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.ToString());
-                }
-                conn.Close();
-            });
-        }
-
-
         //////////////////////////////////////////////////////////////
         ///                                                     //////
         ///                     Automod                         //////
@@ -427,15 +420,6 @@ namespace Bot
                 }
             });
         }
-
-
-
-
-
-
-
-
-
 
         public async Task SendEmbedMessage(string title, string des, ISocketMessageChannel chan)
         {
