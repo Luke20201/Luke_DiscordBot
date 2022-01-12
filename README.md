@@ -10,3 +10,7 @@ User Information Commands
 
 Anyone can come and learn from this code freely. 
 I only ask you do not use for profit. Discord bot's should be free for the people to use.
+
+#Dependencies
+MySQL.Data
+Discord.NetLabs (or Discord.Net)
