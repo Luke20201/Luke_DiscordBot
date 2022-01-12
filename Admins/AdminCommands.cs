@@ -15,7 +15,7 @@ namespace Bot.Admins
         public string SQLReadQuery;
         private IMessage stickyMess;
         private string StickyContent;
-        private string connStr = "Server=echstreme.de;Port=3306;Database=c1Look;Uid=c1Look;Pwd=gkmcpLNNF6Y_5;SSL Mode =None";
+        private string connStr = "";
         public async void SQLRead()
         {
             await Context.Guild.DownloadUsersAsync();
